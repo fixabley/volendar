@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Volendar - 봉사 달력",
+  "version": "0.1.0",
+  "description": "1365·VMS에서 신청한 봉사와 모집 중인 봉사를 한 달력에서 보고 ICS로 내보냅니다.",
+  "action": { "default_title": "봉사 달력 열기" },
+  "background": { "service_worker": "src/background.js", "type": "module" },
+  "permissions": ["storage", "scripting"],
+  "host_permissions": ["https://www.1365.go.kr/*", "https://www.vms.or.kr/*"],
+  "optional_host_permissions": ["https://*/*"]
+}

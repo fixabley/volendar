@@ -1,0 +1,55 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>봉사 신청 내역</title></head><body>
+<form name="frm" action="reqstDtls.do" method="post">
+  <input type="hidden" name="currentPageNo" value="1">
+  <select name="schActSe"><option value="">봉사유형 전체</option><option value="2">시간인증</option><option value="1">활동인증</option></select>
+  <select name="schApply"><option value="">신청상태</option><option value="1">접수</option><option value="2">승인</option><option value="3">취소</option><option value="4">반려</option></select>
+  <input type="text" name="schTermFrom" value="2026-08-11"><input type="text" name="schTermTo" value="2026-11-11">
+</form>
+<div class="board_list board_list2 non_sub req_board">
+  <p>전체 <em>3</em>건</p>
+  <ul class="list_wrap ul_top">
+    <li class="nonlist"><div class="list list2"><div class="list2_wrap">
+      <dl class="txts">
+        <dt class="tit_board_list larg">
+          <div class="tag_g"><span class="tag pink">시간인증</span><span class="tag btn_accept">접수</span></div>
+          <a href="javascript:detailView('1000001','2','20261203','10','A01', '1', '1', '', '', '', '');">도서관 서가 정리 (오전)</a>
+        </dt>
+        <dd class="board_data normal">
+          <dl><dt>신청일자</dt><dd>2026.11.11</dd></dl>
+          <dl><dt>봉사일자</dt><dd>2026.12.03</dd></dl>
+          <dl><dt>시작시간</dt><dd>10시 0분</dd></dl>
+          <dl><dt>종료시간</dt><dd>14시 0분</dd></dl>
+        </dd>
+      </dl>
+      <div class="serve_btn"><a href="javascript:void(0)" class="btn btn_black" onclick="javascript:applyDelte('1000001','2','20261203','10', '2'); return false;">취소하기</a></div>
+    </div></div></li>
+    <li class="nonlist"><div class="list list2"><div class="list2_wrap">
+      <dl class="txts">
+        <dt class="tit_board_list larg">
+          <div class="tag_g"><span class="tag pink">시간인증</span><span class="tag btn_accept">승인</span></div>
+          <a href="javascript:detailView('1000002','2','20261209','14','A01', '2', '1', '', '', '', '');">복지관 배식 보조</a>
+        </dt>
+        <dd class="board_data normal">
+          <dl><dt>신청일자</dt><dd>2026.11.01</dd></dl>
+          <dl><dt>봉사일자</dt><dd>2026.12.09</dd></dl>
+          <dl><dt>시작시간</dt><dd>14시 30분</dd></dl>
+          <dl><dt>종료시간</dt><dd>16시 30분</dd></dl>
+        </dd>
+      </dl>
+    </div></div></li>
+    <li class="nonlist"><div class="list list2"><div class="list2_wrap">
+      <dl class="txts">
+        <dt class="tit_board_list larg">
+          <div class="tag_g"><span class="tag pink">활동인증</span><span class="tag btn_cancel">취소</span></div>
+          <a href="javascript:detailView('1000003','1','20261120','10','A01', '3', '1', '', '', '', '');">하천 정화 활동</a>
+        </dt>
+        <dd class="board_data normal">
+          <dl><dt>신청일자</dt><dd>2026.10.30</dd></dl>
+          <dl><dt>봉사일자</dt><dd>2026.11.20</dd></dl>
+        </dd>
+      </dl>
+    </div></div></li>
+  </ul>
+</div>
+<div class="paging"><div class="pagination"><a class="page_num active" href="#"><span class="haze">현재페이지</span>1</a></div></div>
+</body></html>

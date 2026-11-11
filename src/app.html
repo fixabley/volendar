@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>봉사 달력</title>
+  <link rel="stylesheet" href="app.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1 class="brand">봉사 달력</h1>
+    <nav class="tabs" role="tablist">
+      <button type="button" role="tab" data-mode="applied" aria-selected="true">내 신청 일정</button>
+      <button type="button" role="tab" data-mode="openings" aria-selected="false">봉사 찾기</button>
+    </nav>
+    <div class="sessions" id="sessions" aria-live="polite"></div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <!-- 내 신청 일정 -->
+      <section class="panel" data-panel="applied">
+        <div class="panel-head">
+          <h2>신청내역</h2>
+          <button type="button" class="btn" id="reloadApplied">다시 불러오기</button>
+        </div>
+        <fieldset>
+          <legend>사이트</legend>
+          <label><input type="checkbox" name="appliedSource" value="1365" checked> 1365</label>
+          <label><input type="checkbox" name="appliedSource" value="vms" checked> VMS</label>
+        </fieldset>
+        <fieldset>
+          <legend>상태</legend>
+          <label><input type="checkbox" name="appliedStatus" value="pending" checked> 접수·대기</label>
+          <label><input type="checkbox" name="appliedStatus" value="confirmed" checked> 승인·참석가능</label>
+          <label><input type="checkbox" name="appliedStatus" value="unknown" checked> 기타</label>
+          <label><input type="checkbox" name="appliedStatus" value="cancelled"> 취소·반려</label>
+        </fieldset>
+        <label class="field">제목 검색
+          <input type="search" id="appliedKeyword" placeholder="예: 도서관">
+        </label>
+        <section class="hours">
+          <h3>봉사시간 합계</h3>
+          <div class="row2">
+            <label class="field">부터<input type="date" id="hoursFrom"></label>
+            <label class="field">까지<input type="date" id="hoursTo"></label>
+          </div>
+          <div class="quick">
+            <button type="button" class="btn small" data-range="month">보고 있는 달</button>
+            <button type="button" class="btn small" data-range="upcoming">오늘 이후</button>
+            <button type="button" class="btn small" data-range="year">올해</button>
+          </div>
+          <div class="hours-result" id="hoursResult" aria-live="polite"></div>
+          <p class="hint">위 사이트·상태 필터에 맞는 신청 일정의 예정 시간입니다. 실제로 인정된 시간은 각 사이트의 실적 조회에서 확인하세요.</p>
+        </section>
+        <div class="export">
+          <button type="button" class="btn primary" id="exportApplied">ICS 내보내기</button>
+          <label class="hint-check"><input type="checkbox" id="includeLong" checked> 7일 넘는 기간형 일정도 종일 일정으로 넣기</label>
+          <p class="hint">필터에 맞는 일정만 들어갑니다. 같은 일정은 같은 UID로 만들어서, 다시 가져와도 중복되지 않게 했습니다.</p>
+        </div>
+      </section>
+
+      <!-- 봉사 찾기 -->
+      <section class="panel" data-panel="openings" hidden>
+        <form id="searchForm" class="search">
+          <h2>모집 검색</h2>
+          <fieldset>
+            <legend>사이트</legend>
+            <label><input type="checkbox" name="searchSource" value="1365" checked> 1365</label>
+            <label><input type="checkbox" name="searchSource" value="vms" checked> VMS</label>
+          </fieldset>
+          <div class="row2">
+            <label class="field">봉사 시작<input type="date" id="from" required></label>
+            <label class="field">까지<input type="date" id="to" required></label>
+          </div>
+          <div class="row2">
+            <label class="field">시·도<select id="province"><option value="">전체</option></select></label>
+            <label class="field">시·군·구<select id="subArea" disabled><option value="">전체</option></select></label>
+          </div>
+          <label class="field">제목 키워드<input type="search" id="keyword" placeholder="예: 배식"></label>
+          <label class="hint-check"><input type="checkbox" id="openOnly" checked> 모집중만</label>
+          <details>
+            <summary>1365 상세 조건</summary>
+            <label class="field">분야<select id="field1365"><option value="">전체</option></select></label>
+            <label class="field">요일<select id="week"><option value="0">전체</option><option value="1">평일</option><option value="2">주말</option></select></label>
+            <label class="field">활동구분<select id="online1365"><option value="">전체</option><option value="2">오프라인</option><option value="1">온라인</option><option value="3">온라인+오프라인</option></select></label>
+            <fieldset>
+              <legend>신청대상</legend>
+              <label><input type="checkbox" id="adult"> 성인</label>
+              <label><input type="checkbox" id="youth"> 청소년</label>
+            </fieldset>
+          </details>
+          <details>
+            <summary>VMS 상세 조건</summary>
+            <label class="field">활동유형<select id="actTypeVms"><option value="">전체</option></select></label>
+            <label class="field">대면 여부<select id="faceVms"><option value="">전체</option><option value="01">대면</option><option value="02">비대면</option><option value="03">대면+비대면</option></select></label>
+            <label class="field">활동주기<select id="termVms"><option value="">전체</option><option value="1">정기</option><option value="2">비정기</option></select></label>
+          </details>
+          <details>
+            <summary>가져올 양</summary>
+            <div class="row2">
+              <label class="field">1365 페이지 (10건씩)<input type="number" id="maxPages1365" min="1" max="30" value="5"></label>
+              <label class="field">VMS 페이지 (50건씩)<input type="number" id="maxPagesVms" min="1" max="10" value="2"></label>
+            </div>
+            <p class="hint">사이트에 부담을 주지 않도록 앞쪽 몇 페이지만 가져옵니다. 결과가 잘렸으면 아래에 표시됩니다.</p>
+          </details>
+          <button type="submit" class="btn primary wide" id="searchBtn">검색</button>
+        </form>
+
+        <section class="freetime">
+          <h2>빈 시간 필터</h2>
+          <label class="hint-check"><input type="checkbox" id="hideConflicts" checked> 내 일정과 겹치면 숨기기</label>
+          <label class="field inline">앞뒤 여유
+            <select id="bufferMin"><option value="0">없음</option><option value="30">30분</option><option value="60">1시간</option><option value="90">1시간 30분</option></select>
+          </label>
+          <label class="hint-check"><input type="checkbox" id="useAvailability"> 가능한 시간대에 맞는 것만 보기</label>
+          <div class="availability" id="availability" hidden></div>
+          <label class="hint-check"><input type="checkbox" id="showUntimed" checked> 시간이 없는 공고도 보기</label>
+          <p class="hint">VMS 공고에는 시간 칸이 없어서, 짧은 공고만 본문에 적힌 시간을 '추정'으로 씁니다. 시간을 찾지 못한 공고는 빈 시간 필터를 적용할 수 없습니다.</p>
+
+          <details class="ext" id="extBox">
+            <summary>내 캘린더 일정도 비교 (ICS)</summary>
+            <ul class="cal-list" id="calList"></ul>
+            <form id="calForm" class="cal-form">
+              <input type="text" id="calUrl" placeholder="https:// 또는 webcal:// 로 시작하는 ICS 주소" autocomplete="off" spellcheck="false">
+              <button type="submit" class="btn small">추가</button>
+            </form>
+            <div class="cal-file">
+              <label class="btn small">.ics 파일 불러오기<input type="file" id="calFile" accept=".ics,text/calendar" hidden></label>
+              <span id="calFileInfo" class="hint"></span>
+            </div>
+            <label class="hint-check"><input type="checkbox" id="allDayBusy"> 종일 일정도 바쁜 시간으로 보기</label>
+            <p class="hint" id="calStatus"></p>
+            <p class="hint">Google 캘린더: 설정 → 내 캘린더 → 캘린더 통합 → 'iCal 형식의 비공개 주소'. iCloud(macOS 캘린더): 캘린더 공유 → 공개 캘린더 링크. 주소는 비밀번호처럼 다뤄야 해서 이 브라우저 안에만 저장합니다. 파일은 일정 제목을 빼고 시간만 저장합니다.</p>
+          </details>
+        </section>
+
+        <div class="export">
+          <button type="button" class="btn" id="exportOpenings">보이는 모집 일정 ICS</button>
+        </div>
+      </section>
+
+      <p class="privacy">조회한 내용은 이 탭 안에서만 쓰고 저장하지 않습니다. 저장하는 것은 필터 설정뿐입니다.</p>
+    </aside>
+
+    <main class="main">
+      <div class="cal-head">
+        <div class="cal-nav">
+          <button type="button" class="btn icon" id="prevMonth" aria-label="이전 달">‹</button>
+          <h2 id="monthTitle"></h2>
+          <button type="button" class="btn icon" id="nextMonth" aria-label="다음 달">›</button>
+          <button type="button" class="btn" id="todayBtn">오늘</button>
+        </div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <p class="notice" id="notice" hidden></p>
+      <div class="calendar" id="calendar" role="grid"></div>
+      <section class="longlist" id="longList" hidden>
+        <h3 id="longTitle"></h3>
+        <ul id="longItems"></ul>
+      </section>
+    </main>
+
+    <aside class="detail" id="detail" hidden>
+      <button type="button" class="btn icon close" id="closeDetail" aria-label="닫기">×</button>
+      <div id="detailBody"></div>
+    </aside>
+  </div>
+</body>
+</html>

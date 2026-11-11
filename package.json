@@ -1,0 +1,13 @@
+{
+  "name": "volendar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "1365·VMS 봉사 신청내역과 모집 공고를 달력과 ICS로 보여주는 크롬 확장",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "devDependencies": {
+    "linkedom": "^0.18.0"
+  }
+}
