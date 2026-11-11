@@ -74,7 +74,8 @@ button, input, select { font: inherit; color: inherit; }
   top: 0;
   z-index: 5;
 }
-.brand { font-size: 17px; letter-spacing: -0.02em; }
+.brand { display: flex; align-items: center; gap: 8px; font-size: 18px; letter-spacing: -0.02em; }
+.brand-sub { font-size: 13px; font-weight: 500; color: var(--muted); }
 .tabs { display: flex; gap: 4px; background: var(--surface-2); padding: 3px; border-radius: 10px; }
 .tabs button {
   border: 0; background: transparent; padding: 6px 14px; border-radius: 8px; cursor: pointer; color: var(--muted);
@@ -229,3 +230,7 @@ details[open] { display: flex; flex-direction: column; gap: 8px; }
   .chip .t { display: none; }
   .detail { left: 16px; width: auto; }
 }
+
+.apply-dates { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; padding: 10px; border-radius: 8px; background: var(--surface-2); font-size: 13px; }
+.apply-dates .btn { align-self: flex-start; }
+.apply-dates .date-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 8px; font-variant-numeric: tabular-nums; }

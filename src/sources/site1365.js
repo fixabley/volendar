@@ -1,6 +1,6 @@
 // 1365 자원봉사포털 (www.1365.go.kr)
 // 신청내역은 로그인 세션이 필요하고, 모집 검색과 상세는 공개 페이지다.
-import { addDays, parseCompactDate, parseDate, parseDateRange, parseTime, parseTimeRange, parseWeekdays, todayKST } from '../lib/dates.js';
+import { addDays, addMonths, parseCompactDate, parseDate, parseDateRange, parseTime, parseTimeRange, parseWeekdays, todayKST } from '../lib/dates.js';
 
 export const ORIGIN = 'https://www.1365.go.kr';
 export const LOGIN_URL = `${ORIGIN}/vols/P9910/mber/volsLogin.do`;
@@ -18,6 +18,8 @@ export const FIELDS = [
 ];
 
 const text = (el) => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+const ownText = (el) =>
+  [...(el?.childNodes ?? [])].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' ').replace(/\s+/g, ' ').trim();
 
 // 신청상태 → 공통 상태 분류
 export function statusKindOf(status) {
@@ -211,4 +213,70 @@ export async function fetchDetail(http, id) {
 export async function fetchSubAreas(http, upper) {
   const json = await http.json(AREA_URL, { method: 'POST', form: { type: 'hopeAreaListUnity', upper, engnSe: '4' } });
   return (json?.list ?? []).map((a) => ({ code: a.code, name: a.codeNm }));
+}
+
+// ---------- 신청 가능 날짜 ----------
+// 기간형 공고의 실제 신청 가능 날짜는 상세의 '신청하기'를 눌러야 나오는 신청서 화면(type=save)에만 있다.
+// 이 화면은 신청서를 보여주기만 하고, 실제 신청은 그 안에서 다시 제출해야(timeCptnRequest.do) 이뤄진다.
+// 그래도 '신청' 경로의 요청이라 사용자가 버튼을 누를 때만, 공고 하나씩 조회한다.
+
+const formEntries = (form) =>
+  [...(form?.querySelectorAll('input[name], select[name]') ?? [])]
+    .filter((el) => !(['checkbox', 'radio'].includes(el.type) && !el.checked))
+    .map((el) => [el.getAttribute('name'), el.value ?? el.getAttribute('value') ?? '']);
+
+const setEntry = (entries, key, value) => {
+  const hit = entries.find(([k]) => k === key);
+  if (hit) hit[1] = value;
+  else entries.push([key, value]);
+};
+
+export function isApplyPageLoggedOut(doc) {
+  return !doc.querySelector('form[name=frmApply]');
+}
+
+// 신청서 화면의 날짜 달력 → { month: 'YYYY-MM', days: [{ date, open, label, count, hours }] }
+export function parseApplyCalendar(doc) {
+  const label = text(doc.querySelector('.calendar_header .tit p')); // '2026.11'
+  const days = [];
+  for (const td of doc.querySelectorAll('td[id^="td"]')) {
+    const check = td.querySelector('input[name=rec]');
+    const date = parseCompactDate(td.id.slice(2));
+    if (!check || !date) continue; // 모집일이 아닌 날
+    days.push({
+      date,
+      open: !check.hasAttribute('disabled') && !td.querySelector('.date_wrap.closed'),
+      label: text(td.querySelector('.check_box span')),
+      count: ownText(td.querySelector('.check_box em')), // '0/1명'
+      hours: [...td.querySelectorAll('select option')].map((o) => o.getAttribute('value')),
+    });
+  }
+  return { month: parseDate(`${label}.01`)?.slice(0, 7) ?? null, days };
+}
+
+export async function fetchApplyDates(http, id, { maxMonths = 3 } = {}) {
+  const detail = await http.doc(detailUrl(id));
+  const entries = formEntries(detail.querySelector('form[name=frm]'));
+  if (!entries.length) throw new Error('공고 상세를 읽지 못했습니다');
+  setEntry(entries, 'titleNm', '신청하기');
+  const opts = { method: 'POST', origin: ORIGIN, isLoggedOut: isApplyPageLoggedOut };
+  let doc = await http.doc(`${SEARCH_URL}?type=save`, { ...opts, form: entries });
+  if (isApplyPageLoggedOut(doc)) return { needLogin: true, days: [], months: [] };
+  const lastMonth = parseCompactDate(Object.fromEntries(entries).progrmEndde)?.slice(0, 7);
+  const days = [];
+  const months = [];
+  for (let i = 0; i < maxMonths; i++) {
+    const cal = parseApplyCalendar(doc);
+    days.push(...cal.days);
+    if (cal.month) months.push(cal.month);
+    if (!cal.month || !lastMonth || cal.month >= lastMonth || i === maxMonths - 1) break;
+    // 사이트의 '다음 달 보기'와 같은 요청: 연·월을 한 달 뒤로 바꿔 gu=next로 다시 보낸다
+    const next = addMonths(`${cal.month}-01`, 1).slice(0, 7);
+    const form = formEntries(doc.querySelector('form[name=frmApply]')).filter(([k]) => k !== 'rec' && !/^sel\d/.test(k));
+    setEntry(form, 'currYear', next.slice(0, 4));
+    setEntry(form, 'currMonth', next.slice(5, 7));
+    doc = await http.doc(`${SEARCH_URL}?type=save&gu=next`, { ...opts, form });
+    if (parseApplyCalendar(doc).month !== next) break; // 기대한 달이 아니면 더 넘기지 않는다
+  }
+  return { needLogin: false, days, months };
 }

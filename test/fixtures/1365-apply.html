@@ -1,0 +1,33 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>개인봉사 신청하기</title></head><body>
+<form name="frmApply" method="post">
+  <input type="hidden" name="_portalCsrfToken" value="token-abc">
+  <input type="hidden" name="pageFlag" value="A01">
+  <input type="hidden" name="currYear" value="2026">
+  <input type="hidden" name="currMonth" value="12">
+  <input type="hidden" name="progrmRegistNo" value="2000002">
+  <input type="hidden" name="progrmBgnde" value="20261201">
+  <input type="hidden" name="progrmEndde" value="20270115">
+  <div class="calendar_header">
+    <div class="tit"><button type="button" class="cal_prev" id="btnPrevMon"></button><p>2026.12</p><button type="button" class="cal_next" id="btnNextMon"></button></div>
+  </div>
+  <table><tbody><tr>
+    <td id="td20261201"><input type="hidden" id="dow20261201" value="2"><div class="date_wrap"><span class="date"><i>1</i></span></div></td>
+    <td id="td20261202"><input type="hidden" id="dow20261202" value="3">
+      <div class="date_wrap checks small"><span class="date"><span class="haze">2026년 12월</span><i class="on">2</i><span class="haze">일 모집일정 있음</span>
+        <input class="chk20261202" id="chk20261202" type="checkbox" name="rec" title="선택"></span>
+        <span class="check_box"><label for="chk20261202"><span>모집중</span><em><i>모집인원 :</i>0/2명</em></label></span></div>
+      <select name="sel20261202" title="시작시간"><option value="10">10시</option></select></td>
+    <td id="td20261203"><input type="hidden" id="dow20261203" value="4">
+      <div class="date_wrap checks small closed"><span class="date"><i class="on">3</i>
+        <input class="chk20261203" id="chk20261203" type="checkbox" name="rec" disabled="disabled"></span>
+        <span class="check_box"><label class="disable select" for="chk20261203"><span>모집완료</span><em><i>모집인원 :</i>2/2명</em></label></span></div>
+      <select name="sel20261203"><option value="10">10시</option></select></td>
+    <td id="td20261205"><input type="hidden" id="dow20261205" value="6">
+      <div class="date_wrap checks small"><span class="date"><i class="on">5</i>
+        <input class="chk20261205" id="chk20261205" type="checkbox" name="rec"></span>
+        <span class="check_box"><label for="chk20261205"><span>모집중</span><em><i>모집인원 :</i>1/2명</em></label></span></div>
+      <select name="sel20261205"><option value="10">10시</option></select></td>
+  </tr></tbody></table>
+  <input type="text" name="mbtlnum" value="010-0000-0000">
+</form>
+</body></html>

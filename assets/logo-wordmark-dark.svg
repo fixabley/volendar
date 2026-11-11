@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 128" role="img" aria-label="Volendar">
+  <rect width="128" height="128" rx="28" fill="#FF6B35"/>
+  <rect x="20" y="30" width="88" height="78" rx="16" fill="#FFFFFF"/>
+  <rect x="38" y="18" width="12" height="24" rx="6" fill="#2F4BC7"/>
+  <rect x="78" y="18" width="12" height="24" rx="6" fill="#2F4BC7"/>
+  <path d="M64 97 C56 91 38 80 38 63 C38 54 44 48 52 48 C57.5 48 61.5 51 64 55.5 C66.5 51 70.5 48 76 48 C84 48 90 54 90 63 C90 80 72 91 64 97 Z" fill="#2F4BC7"/>
+  <text x="152" y="88" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="72" font-weight="800" letter-spacing="-2" textLength="356" lengthAdjust="spacingAndGlyphs"><tspan fill="#FF8A4C">Vol</tspan><tspan fill="#8CA2FF">endar</tspan></text>
+</svg>

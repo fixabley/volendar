@@ -14,7 +14,10 @@ export function isLongRange(item) {
 export function expand(item) {
   if (isLongRange(item)) return [];
   const days = eachDay(item.date, item.endDate ?? item.date);
-  const picked = item.weekdays ? days.filter((d) => item.weekdays.has(weekdayOf(d))) : days;
+  // 신청 가능 날짜를 확인했으면 그 날짜만, 아니면 활동요일로 거른다
+  const picked = item.availableDates
+    ? days.filter((d) => item.availableDates.has(d))
+    : item.weekdays ? days.filter((d) => item.weekdays.has(weekdayOf(d))) : days;
   return picked.map((date) => ({ item, date, startTime: item.startTime, endTime: item.endTime }));
 }
 

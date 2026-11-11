@@ -740,9 +740,72 @@ function renderDetail(view) {
     h('div', {}, badges),
     h('h3', {}, it.title),
     h('dl', {}, rows),
+    it.source === '1365' && it.kind === 'opening' && applyDatesBox(it),
     it.url && h('a', { class: 'link', href: it.url, target: '_blank', rel: 'noopener' },
       it.kind === 'opening' ? `${LABEL[it.source]}에서 보고 신청하기 ↗` : `${LABEL[it.source]}에서 보기 ↗`),
   );
+}
+
+// ---------- 1365 신청 가능 날짜 (사용자가 누를 때만 조회) ----------
+
+function demoApplyDates(item) {
+  const days = expand({ ...item, availableDates: null }).map((o, i) => ({
+    date: o.date, open: i % 3 !== 1, label: i % 3 !== 1 ? '모집중' : '모집완료', count: i % 3 !== 1 ? '0/2명' : '2/2명', hours: [],
+  }));
+  return { needLogin: false, days, months: [...new Set(days.map((d) => d.date.slice(0, 7)))] };
+}
+
+const shortDate = (date) => `${Number(date.slice(5, 7))}/${Number(date.slice(8))}(${weekdayName(date)})`;
+
+async function loadApplyDates(item) {
+  item.applyDates = { status: 'loading' };
+  render();
+  try {
+    const res = DEMO
+      ? demoApplyDates(item)
+      : await s1365.fetchApplyDates(http, item.id);
+    if (res.needLogin) {
+      item.applyDates = { status: 'needLogin' };
+    } else {
+      item.applyDates = { status: 'ok', days: res.days };
+      // 확인한 달은 신청 가능한 날짜만 남기고, 확인하지 못한 달(maxMonths 넘김)은 활동요일 기준으로 그대로 둔다
+      const months = new Set(res.months);
+      const unchecked = expand({ ...item, availableDates: null }).map((o) => o.date).filter((d) => !months.has(d.slice(0, 7)));
+      item.availableDates = new Set([...res.days.filter((d) => d.open).map((d) => d.date), ...unchecked]);
+    }
+  } catch (e) {
+    item.applyDates = { status: 'error', error: e.message };
+  }
+  render();
+}
+
+function applyDatesBox(it) {
+  const a = it.applyDates;
+  if (!a) {
+    return h('div', { class: 'apply-dates' },
+      h('button', { type: 'button', class: 'btn small', onclick: () => loadApplyDates(it) }, '신청 가능 날짜 불러오기'),
+      h('p', { class: 'hint' }, '1365 신청서 화면을 열어 날짜별 모집 상태만 읽습니다. 신청은 하지 않습니다. 1365에 로그인되어 있어야 합니다.'));
+  }
+  if (a.status === 'loading') return h('div', { class: 'apply-dates hint' }, '신청 가능 날짜를 확인하는 중…');
+  if (a.status === 'needLogin') {
+    return h('div', { class: 'apply-dates' },
+      h('p', { class: 'hint' }, '1365에 로그인해야 확인할 수 있습니다. '),
+      h('a', { href: s1365.LOGIN_URL, target: '_blank', rel: 'noopener' }, '1365 로그인'),
+      ' ',
+      h('button', { type: 'button', class: 'btn small', onclick: () => loadApplyDates(it) }, '다시 확인'));
+  }
+  if (a.status === 'error') {
+    return h('div', { class: 'apply-dates' }, h('p', { class: 'hint' }, `확인하지 못했습니다: ${a.error}`),
+      h('button', { type: 'button', class: 'btn small', onclick: () => loadApplyDates(it) }, '다시 확인'));
+  }
+  const open = a.days.filter((d) => d.open);
+  const closed = a.days.length - open.length;
+  return h('div', { class: 'apply-dates' },
+    h('div', {},
+      h('strong', {}, open.length ? `신청 가능 ${open.length}일` : '신청 가능한 날짜가 없습니다'),
+      closed > 0 && h('span', { class: 'hint' }, ` · 마감 ${closed}일`)),
+    open.length > 0 && h('ul', { class: 'date-list' }, open.map((d) => h('li', {}, `${shortDate(d.date)} ${d.count}`))),
+    h('p', { class: 'hint' }, '달력에는 신청 가능한 날짜만 남겼습니다.'));
 }
 
 // ---------- ICS ----------
