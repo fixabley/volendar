@@ -234,3 +234,9 @@ details[open] { display: flex; flex-direction: column; gap: 8px; }
 .apply-dates { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; padding: 10px; border-radius: 8px; background: var(--surface-2); font-size: 13px; }
 .apply-dates .btn { align-self: flex-start; }
 .apply-dates .date-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 8px; font-variant-numeric: tabular-nums; }
+
+.detail .content { border-top: 1px solid var(--line); padding-top: 10px; margin-bottom: 12px; }
+.detail .content summary { cursor: pointer; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+.detail .content-text { white-space: pre-wrap; font-size: 13px; line-height: 1.6; color: var(--text); max-height: 320px; overflow: auto; }
+.detail dd a { color: var(--accent); }
+.detail .save-contact { display: block; margin-bottom: 10px; }

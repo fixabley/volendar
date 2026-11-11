@@ -76,3 +76,15 @@ test('1365의 시 하나에 VMS의 구 여러 개를 묶는다', () => {
     { name: '과천시', c1365: '3950000', cVms: ['4129000000'] },
   ]);
 });
+
+test('바쁜 시간과 신청함 표시를 따로 판단하고, 이미 신청한 공고는 숨길 수 있다', () => {
+  const pending = expand(applied({ id: 'p1', startTime: '09:00', endTime: '13:00', statusKind: 'pending' }));
+  const [occ] = expand(opening());
+  // 접수 상태를 바쁜 시간에서 빼도 '신청함' 표시는 남는다
+  assert.deepEqual(classifyOpening(occ, { busy: [], applied: pending }), { tags: ['applied'], hidden: false });
+  assert.deepEqual(classifyOpening(occ, { busy: [], applied: pending, hideApplied: true }), { tags: ['applied'], hidden: true });
+  // 다른 공고는 접수 신청이 바쁜 시간에서 빠지면 겹침이 아니다
+  const [other] = expand(opening({ id: 'p2' }));
+  assert.deepEqual(classifyOpening(other, { busy: [], applied: pending, hideConflicts: true }), { tags: [], hidden: false });
+  assert.deepEqual(classifyOpening(other, { busy: pending, applied: pending, hideConflicts: true }), { tags: ['conflict'], hidden: true });
+});

@@ -38,12 +38,17 @@ const sameSlot = (opening, applied) =>
   opening.item.source === applied.item.source && opening.item.id === applied.item.id && opening.date === applied.date;
 
 // 모집 일정 하나에 붙일 표시와 숨김 여부를 정한다.
-// opts: { busy: 신청 일정 occurrence[], hideConflicts, useAvailability, availability, bufferMin, showUntimed }
+// opts: { busy: 바쁜 시간 occurrence[], applied: 내 신청 occurrence[] (없으면 busy), hideConflicts, hideApplied,
+//         useAvailability, availability, bufferMin, showUntimed }
 export function classifyOpening(occ, opts) {
   const tags = [];
   const timed = Boolean(occ.startTime && occ.endTime);
   const activeBusy = (opts.busy ?? []).filter((b) => b.item.statusKind !== 'cancelled');
-  if (activeBusy.some((b) => sameSlot(occ, b))) tags.push('applied');
+  const mine = (opts.applied ?? activeBusy).filter((b) => b.item.statusKind !== 'cancelled');
+  if (mine.some((b) => sameSlot(occ, b))) {
+    tags.push('applied');
+    if (opts.hideApplied) return { tags, hidden: true };
+  }
   if (!timed) {
     tags.push('untimed');
     return { tags, hidden: !opts.showUntimed };

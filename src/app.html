@@ -57,8 +57,9 @@
         </section>
         <div class="export">
           <button type="button" class="btn primary" id="exportApplied">ICS 내보내기</button>
+          <button type="button" class="btn" id="exportContacts">연락처 내보내기 (.vcf)</button>
           <label class="hint-check"><input type="checkbox" id="includeLong" checked> 7일 넘는 기간형 일정도 종일 일정으로 넣기</label>
-          <p class="hint">필터에 맞는 일정만 들어갑니다. 같은 일정은 같은 UID로 만들어서, 다시 가져와도 중복되지 않게 했습니다.</p>
+          <p class="hint">필터에 맞는 일정만 들어갑니다. 같은 일정은 같은 UID로 만들어서, 다시 가져와도 중복되지 않게 했습니다. 연락처는 신청·승인한 봉사의 담당 기관 연락처를 봉사 이름으로 묶어 저장합니다(취소 제외).</p>
         </div>
       </section>
 
@@ -112,6 +113,13 @@
         <section class="freetime">
           <h2>빈 시간 필터</h2>
           <label class="hint-check"><input type="checkbox" id="hideConflicts" checked> 내 일정과 겹치면 숨기기</label>
+          <fieldset>
+            <legend>바쁜 시간으로 볼 내 신청</legend>
+            <label><input type="checkbox" name="busyStatus" value="confirmed" checked> 승인·참석가능</label>
+            <label><input type="checkbox" name="busyStatus" value="pending" checked> 접수·대기</label>
+            <label><input type="checkbox" name="busyStatus" value="unknown" checked> 기타</label>
+          </fieldset>
+          <label class="hint-check"><input type="checkbox" id="hideApplied"> 이미 신청한 공고 숨기기</label>
           <label class="field inline">앞뒤 여유
             <select id="bufferMin"><option value="0">없음</option><option value="30">30분</option><option value="60">1시간</option><option value="90">1시간 30분</option></select>
           </label>
@@ -133,7 +141,7 @@
             </div>
             <label class="hint-check"><input type="checkbox" id="allDayBusy"> 종일 일정도 바쁜 시간으로 보기</label>
             <p class="hint" id="calStatus"></p>
-            <p class="hint">Google 캘린더: 설정 → 내 캘린더 → 캘린더 통합 → 'iCal 형식의 비공개 주소'. iCloud(macOS 캘린더): 캘린더 공유 → 공개 캘린더 링크. 주소는 비밀번호처럼 다뤄야 해서 이 브라우저 안에만 저장합니다. 파일은 일정 제목을 빼고 시간만 저장합니다.</p>
+            <p class="hint">주소로 등록할 수 있는 것은 Google·iCloud·Outlook 캘린더입니다. Google 캘린더: 설정 → 내 캘린더 → 캘린더 통합 → 'iCal 형식의 비공개 주소'. iCloud(macOS 캘린더): 캘린더 공유 → 공개 캘린더 링크. 다른 캘린더는 .ics 파일로 내보내서 불러오세요. 주소는 비밀번호처럼 다뤄야 해서 이 브라우저 안에만 저장하고, 파일은 일정 제목을 빼고 시간만 저장합니다.</p>
           </details>
         </section>
 

@@ -66,6 +66,9 @@ test('1365 상세는 숨은 actWkdy가 아니라 화면의 활동요일을 쓴�
   assert.equal(d.org, '가상구청 교육정책과');
   assert.deepEqual(d.time, { start: '10:00', end: '14:00' });
   assert.equal(d.creditCapHours, 4);
+  assert.equal(d.content, '1. 업무내용: 행사장 안내, 부스 운영 보조\n2. 준비물: 편한 복장\n\n★문의 : 000-000-0000');
+  // 주석으로 숨긴 담당자 이름은 읽지 않는다
+  assert.deepEqual(d.contact, { phone: '000-000-0000', fax: '000-000-0001', address: '가상시 가상구 가상로 1' });
 });
 
 test('VMS 신청결과를 읽는다', () => {
@@ -99,6 +102,8 @@ test('VMS 모집 검색과 상세 본문의 시간 추정', () => {
   assert.equal(d.cycle, '비정기 [ 1일(4시간) ]');
   assert.deepEqual(d.guessedTime, { start: '09:00', end: '13:00' });
   assert.equal(d.guessedHours, 4);
+  assert.equal(d.content, '행사 안내 봉사자를 모집합니다.\n일시 : 2026.12.15(화) 09:00~13:00, 가상문화예술회관');
+  assert.deepEqual(d.contact, { name: '홍길동', email: 'volunteer@example.org', phone: '000-0000-0000' });
 });
 
 test('VMS 검색 파라미터에서 빈 값은 빠진다', async () => {

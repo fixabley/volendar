@@ -7,6 +7,8 @@ import { classifyOpening, defaultAvailability, expand, isLongRange } from './lib
 import { formatMinutes, itemMinutes, summarizeHours } from './lib/hours.js';
 import { PROVINCES, mergeSubAreas } from './lib/regions.js';
 import { busyBlocks, parseIcs } from './lib/icsParse.js';
+import { appliedContacts } from './lib/contacts.js';
+import { buildVcard } from './lib/vcard.js';
 import { demoApplied, demoCalendarIcs, demoOpenings, demoSubAreas } from './demo.js';
 
 const SOURCES = { 1365: s1365, vms };
@@ -49,7 +51,7 @@ const DEFAULT_SETTINGS = {
     field1365: '', week: '0', online1365: '', adult: false, youth: false,
     actTypeVms: '', faceVms: '', termVms: '', maxPages1365: 5, maxPagesVms: 2,
   },
-  freeTime: { hideConflicts: true, bufferMin: 0, useAvailability: false, availability: defaultAvailability(), showUntimed: true, allDayBusy: false },
+  freeTime: { hideConflicts: true, bufferMin: 0, useAvailability: false, availability: defaultAvailability(), showUntimed: true, allDayBusy: false, busyStatuses: ['confirmed', 'pending', 'unknown'], hideApplied: false },
   calendars: [], // 외부 캘린더 ICS 주소 [{ url }]
 };
 
@@ -105,8 +107,12 @@ function applyDetail(item, d) {
     item.detailFailed = true;
     return;
   }
+  item.detailLoaded = true;
   item.place ||= d.place;
   item.org ||= d.org;
+  item.content ||= d.content;
+  // 비어 있는 칸은 빼고 둔다
+  item.contact ??= Object.fromEntries(Object.entries(d.contact ?? {}).filter(([, v]) => v));
   if (item.source === '1365') {
     item.creditCapHours = d.creditCapHours;
     if (item.kind === 'opening' && item.endDate > item.date) {
@@ -314,14 +320,20 @@ function externalBusy() {
   }));
 }
 
+// 내 신청은 고른 상태(예: 승인만)만 바쁜 시간으로 보고, '신청함' 표시는 상태와 관계없이 붙인다
 function freeTimeOptions() {
   const ft = state.settings.freeTime;
-  return { ...ft, bufferMin: Number(ft.bufferMin) || 0, busy: [...allApplied().flatMap(expand), ...externalBusy()] };
+  const applied = allApplied().flatMap(expand);
+  const busy = [...applied.filter((o) => ft.busyStatuses.includes(o.item.statusKind)), ...externalBusy()];
+  return { ...ft, bufferMin: Number(ft.bufferMin) || 0, applied, busy };
 }
 
 // ---------- 외부 캘린더 (ICS) ----------
 
 const toHttps = (url) => url.trim().replace(/^webcal:\/\//i, 'https://');
+
+// manifest의 optional_host_permissions와 같은 목록. 그 밖의 캘린더는 .ics 파일로 불러온다
+const CALENDAR_HOSTS = [/^calendar\.google\.com$/, /(^|\.)icloud\.com$/, /^outlook\.(live|office365|office)\.com$/];
 
 function recomputeExternal() {
   const events = [
@@ -374,6 +386,10 @@ function addCalendar(raw) {
     if (url.protocol !== 'https:') throw new Error();
   } catch {
     $('#calStatus').textContent = 'https:// 또는 webcal:// 로 시작하는 주소를 넣어 주세요.';
+    return;
+  }
+  if (!CALENDAR_HOSTS.some((re) => re.test(url.hostname))) {
+    $('#calStatus').textContent = `${url.hostname} 주소는 지원하지 않습니다. Google·iCloud·Outlook 주소만 등록할 수 있고, 다른 캘린더는 .ics 파일로 내보내서 불러와 주세요.`;
     return;
   }
   const request = globalThis.chrome?.permissions
@@ -462,13 +478,13 @@ function computeView() {
   const ft = state.settings.freeTime;
   const opts = freeTimeOptions();
   const { busy } = opts;
-  const hidden = { conflict: 0, outside: 0, untimed: 0 };
+  const hidden = { applied: 0, conflict: 0, outside: 0, untimed: 0 };
   const chips = [];
   for (const occ of openingOccurrences()) {
     if (!inRange(occ, first, last)) continue;
     const { tags, hidden: isHidden } = classifyOpening(occ, opts);
     if (isHidden) {
-      const reason = tags.find((t) => t in hidden);
+      const reason = opts.hideApplied && tags.includes('applied') ? 'applied' : ['conflict', 'outside', 'untimed'].find((t) => tags.includes(t));
       if (reason) hidden[reason]++;
       continue;
     }
@@ -604,9 +620,9 @@ function renderNotice(view) {
       else parts.push(`${LABEL[key]} ${s.loaded}/${s.total}건${s.truncated ? " (앞쪽 일부만 가져옴, '가져올 양'에서 늘릴 수 있음)" : ''}`);
     }
     const h0 = view.hidden;
-    const hiddenTotal = h0 ? h0.conflict + h0.outside + h0.untimed : 0;
+    const hiddenTotal = h0 ? h0.applied + h0.conflict + h0.outside + h0.untimed : 0;
     if (hiddenTotal) {
-      const why = [h0.conflict && `겹침 ${h0.conflict}`, h0.outside && `시간대 밖 ${h0.outside}`, h0.untimed && `시간 미정 ${h0.untimed}`].filter(Boolean);
+      const why = [h0.applied && `이미 신청 ${h0.applied}`, h0.conflict && `겹침 ${h0.conflict}`, h0.outside && `시간대 밖 ${h0.outside}`, h0.untimed && `시간 미정 ${h0.untimed}`].filter(Boolean);
       parts.push(`이 달에서 숨긴 일정 ${hiddenTotal}건 (${why.join(', ')})`);
     }
     const pending = state.openings.items.filter((it) => it.detailPending).length;
@@ -683,7 +699,7 @@ function select(sel) {
   state.selected = sel;
   if (sel.type === 'item') {
     const item = sel.occ.item;
-    if (!item.place && !item.detailFailed) {
+    if (!item.detailLoaded && !item.detailFailed) {
       getDetail(item).then((d) => {
         applyDetail(item, d);
         scheduleRender();
@@ -721,8 +737,16 @@ function renderDetail(view) {
   if (it.endDate > it.date && !isLongRange(it)) add('봉사기간', `${it.date} ~ ${it.endDate}`);
   add('활동요일', it.weekdaysText || (it.kind === 'opening' && it.source === '1365' && it.endDate > it.date ? (it.detailPending ? '확인 중…' : '확인 못 함 (모든 날짜에 표시)') : ''));
   add('활동주기', it.cycle);
-  add('장소', it.place || (it.detailFailed ? '' : '불러오는 중…'));
+  const loading = !it.detailLoaded && !it.detailFailed && it.source !== 'ext';
+  add('장소', it.place || (loading ? '불러오는 중…' : ''));
   add('기관', it.org);
+  const c = it.contact ?? {};
+  add('담당자', c.name);
+  add('연락처', (c.phone || c.email) && h('span', {},
+    c.phone && h('a', { href: `tel:${c.phone.replace(/[^\d+]/g, '')}` }, c.phone),
+    c.phone && c.email && ' · ',
+    c.email && h('a', { href: `mailto:${c.email}` }, c.email)));
+  add('기관 주소', c.address);
   add('지역', it.area);
   add('모집기간', it.recruitPeriod);
   add('인정시간', it.creditHours);
@@ -741,6 +765,14 @@ function renderDetail(view) {
     h('h3', {}, it.title),
     h('dl', {}, rows),
     it.source === '1365' && it.kind === 'opening' && applyDatesBox(it),
+    it.content && h('details', { class: 'content', open: true },
+      h('summary', {}, '활동 내용'),
+      h('div', { class: 'content-text' }, it.content)),
+    (it.contact?.phone || it.contact?.email) && it.source !== 'ext' && h('button', {
+      type: 'button',
+      class: 'btn small save-contact',
+      onclick: () => exportContacts([{ ...it, statusKind: it.statusKind === 'cancelled' ? 'pending' : it.statusKind }], `${it.title.replace(/[\\/:*?"<>|]/g, '_').slice(0, 60)}.vcf`),
+    }, '연락처 저장 (.vcf)'),
     it.url && h('a', { class: 'link', href: it.url, target: '_blank', rel: 'noopener' },
       it.kind === 'opening' ? `${LABEL[it.source]}에서 보고 신청하기 ↗` : `${LABEL[it.source]}에서 보기 ↗`),
   );
@@ -810,8 +842,8 @@ function applyDatesBox(it) {
 
 // ---------- ICS ----------
 
-function download(filename, content) {
-  const url = URL.createObjectURL(new Blob([content], { type: 'text/calendar;charset=utf-8' }));
+function download(filename, content, type = 'text/calendar') {
+  const url = URL.createObjectURL(new Blob([content], { type: `${type};charset=utf-8` }));
   h('a', { href: url, download: filename }).click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -823,9 +855,26 @@ function describe(it, extra = []) {
     hours && `봉사시간 ${formatMinutes(hours.minutes)}${hours.estimated ? ' (추정)' : ''}`,
     it.timeGuessed && '시간은 공고 본문에서 추정한 값입니다.',
     it.org && `기관: ${it.org}`,
+    it.place && `장소: ${it.place}`,
+    it.contact?.name && `담당자: ${it.contact.name}`,
+    (it.contact?.phone || it.contact?.email) && `연락처: ${[it.contact.phone, it.contact.email].filter(Boolean).join(' · ')}`,
     ...extra,
     it.url,
+    it.content && `\n[활동 내용]\n${it.content.length > 1500 ? `${it.content.slice(0, 1500)}…` : it.content}`,
   ].filter(Boolean).join('\n');
+}
+
+function exportContacts(items, filename) {
+  const { contacts, missing, pending } = appliedContacts(items);
+  const notes = [];
+  if (pending) notes.push(`상세를 아직 불러오는 중인 ${pending}곳`);
+  if (missing) notes.push(`연락처가 없는 ${missing}곳`);
+  if (contacts.length === 0) {
+    showNotice(`내보낼 연락처가 없습니다.${notes.length ? ` (${notes.join(', ')})` : ''}`);
+    return;
+  }
+  download(filename, buildVcard(contacts), 'text/vcard');
+  showNotice(`연락처 ${contacts.length}곳을 저장했습니다.${notes.length ? ` ${notes.join(', ')}은 뺐습니다.` : ''}`);
 }
 
 function exportApplied() {
@@ -942,6 +991,8 @@ function fillForm() {
   $('#useAvailability').checked = ft.useAvailability;
   $('#showUntimed').checked = ft.showUntimed;
   $('#allDayBusy').checked = ft.allDayBusy;
+  $('#hideApplied').checked = ft.hideApplied;
+  for (const el of $$('input[name=busyStatus]')) el.checked = ft.busyStatuses.includes(el.value);
   renderAvailability();
 }
 
@@ -967,6 +1018,7 @@ function bind() {
   for (const el of $$('input[name=appliedSource], input[name=appliedStatus], #includeLong')) el.addEventListener('change', onAppliedFilter);
   $('#appliedKeyword').addEventListener('input', () => render());
   $('#exportApplied').addEventListener('click', exportApplied);
+  $('#exportContacts').addEventListener('click', () => exportContacts(filteredApplied(), `봉사-연락처-${today}.vcf`));
   for (const id of ['hoursFrom', 'hoursTo']) $(`#${id}`).addEventListener('change', renderHours);
   for (const btn of $$('.quick [data-range]')) btn.addEventListener('click', () => setHoursRange(btn.dataset.range));
 
@@ -980,11 +1032,13 @@ function bind() {
     ft.bufferMin = Number($('#bufferMin').value);
     ft.useAvailability = $('#useAvailability').checked;
     ft.showUntimed = $('#showUntimed').checked;
+    ft.hideApplied = $('#hideApplied').checked;
+    ft.busyStatuses = $$('input[name=busyStatus]:checked').map((i) => i.value);
     saveSettings();
     renderAvailability();
     render();
   };
-  for (const id of ['hideConflicts', 'bufferMin', 'useAvailability', 'showUntimed']) $(`#${id}`).addEventListener('change', onFreeTime);
+  for (const el of $$('#hideConflicts, #bufferMin, #useAvailability, #showUntimed, #hideApplied, input[name=busyStatus]')) el.addEventListener('change', onFreeTime);
 
   $('#calForm').addEventListener('submit', (e) => {
     e.preventDefault();

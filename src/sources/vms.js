@@ -2,6 +2,7 @@
 // 신청결과는 로그인 세션(Any-ID 통합인증)이 필요하고, 모집 검색과 상세는 공개 페이지다.
 // VMS 공고에는 시간 칸이 없어서, 짧은 공고만 상세 본문에서 시간을 추정한다.
 import { findTimeRange, parseDateRange } from '../lib/dates.js';
+import { multilineText } from '../lib/text.js';
 
 export const ORIGIN = 'https://www.vms.or.kr';
 export const LOGIN_URL = `${ORIGIN}/login.do`;
@@ -111,7 +112,16 @@ export function parseDetailPage(doc) {
   const fields = {};
   for (const th of doc.querySelectorAll('table.eval-kv th')) fields[text(th)] = text(th.nextElementSibling);
   const body = text(doc.querySelector('.board-content'));
+  // 담당자 : 이름 | 이메일 : … | 연락처 : …
+  const contact = {};
+  const keys = { 담당자: 'name', 이메일: 'email', 연락처: 'phone' };
+  for (const li of doc.querySelectorAll('.contact-banner li')) {
+    const key = keys[text(li.querySelector('b'))];
+    if (key) contact[key] = text(li).replace(/^[^:]*:\s*/, '');
+  }
   return {
+    content: multilineText(doc.querySelector('.board-content'), { skip: (el) => el.classList?.contains('note-warn') }),
+    contact,
     cycle: fields['활동주기'] ?? '',
     place: fields['봉사장소']?.replace(/\s*지도보기\s*$/, '') ?? '',
     org: fields['봉사활동처'] ?? '',

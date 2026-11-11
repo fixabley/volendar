@@ -2,7 +2,7 @@ import { addDays, kstToIcsUtc } from './dates.js';
 
 const CRLF = '\r\n';
 
-function escapeText(value) {
+export function escapeText(value) {
   return String(value ?? '')
     .replace(/\\/g, '\\\\')
     .replace(/\r?\n/g, '\\n')
@@ -11,7 +11,7 @@ function escapeText(value) {
 }
 
 // RFC 5545: 한 줄은 75옥텟을 넘지 않게 접는다. 한글은 UTF-8로 3바이트라서 문자 수가 아니라 바이트 수로 센다.
-function fold(line) {
+export function fold(line) {
   const encoder = new TextEncoder();
   const out = [];
   let current = '';

@@ -1,5 +1,6 @@
 // 1365 자원봉사포털 (www.1365.go.kr)
 // 신청내역은 로그인 세션이 필요하고, 모집 검색과 상세는 공개 페이지다.
+import { multilineText } from '../lib/text.js';
 import { addDays, addMonths, parseCompactDate, parseDate, parseDateRange, parseTime, parseTimeRange, parseWeekdays, todayKST } from '../lib/dates.js';
 
 export const ORIGIN = 'https://www.1365.go.kr';
@@ -132,6 +133,13 @@ export function parseDetailPage(doc) {
     time: parseTimeRange(fields['봉사시간']),
     // '9시 0분 ~ 13시 0분 (최대 4시간 인정)'
     creditCapHours: Number((fields['봉사시간']?.match(/최대\s*(\d+(?:\.\d+)?)\s*시간/) ?? [])[1]) || null,
+    content: multilineText(doc.querySelector('.board_body .bb_txt')),
+    // 담당자 이름은 사이트가 주석으로 숨겨 두어 읽지 않는다
+    contact: {
+      phone: text(doc.querySelector('.incharge_data dl.tel dd')),
+      fax: text(doc.querySelector('.incharge_data dl.fax dd')),
+      address: text(doc.querySelector('.incharge_data dl.addr dd')),
+    },
   };
 }
 

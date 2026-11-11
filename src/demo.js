@@ -4,6 +4,14 @@ import { addDays, daysBetween, weekdayOf } from './lib/dates.js';
 
 const compact = (date) => date.replace(/-/g, '');
 
+// 예시 연락처는 실제로 걸리지 않는 번호와 example 도메인만 쓴다
+const demoContact = (source) =>
+  source === 'vms'
+    ? { name: '김봉사', phone: '02-000-0000', email: 'volunteer@example.org' }
+    : { phone: '02-000-0000', address: '서울시 새봄구 예시로 1' };
+const demoContent = (title) =>
+  `${title} 봉사자를 모집합니다.\n\n- 준비물: 편한 복장, 개인 물병\n- 시작 10분 전까지 1층 안내데스크로 와 주세요.\n- 사정이 생기면 미리 연락 부탁드립니다.`;
+
 function applied(o) {
   return {
     kind: 'applied',
@@ -11,6 +19,9 @@ function applied(o) {
     startTime: null,
     endTime: null,
     url: null,
+    detailLoaded: true,
+    content: demoContent(o.title),
+    contact: demoContact(o.source),
     ...o,
     uid: `${o.source}-demo-${o.id}-${compact(o.date)}`,
   };
@@ -104,6 +115,9 @@ export function demoOpenings(today, filters) {
       place: `${name}${placeType}`,
       tags: source === '1365' ? ['시간인증', '오프라인', field] : ['대면'],
       url: null,
+      detailLoaded: true,
+      content: demoContent(`${name} ${activity}`),
+      contact: demoContact(source),
       date: start,
       endDate: start,
       startTime: null,
