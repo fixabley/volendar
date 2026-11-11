@@ -181,5 +181,15 @@
       <div id="detailBody"></div>
     </aside>
   </div>
+  <dialog id="loginDialog" class="login-dialog" aria-labelledby="loginTitle">
+    <h2 id="loginTitle">로그인이 필요합니다</h2>
+    <p id="loginDesc"></p>
+    <div class="login-buttons" id="loginButtons"></div>
+    <p class="hint">로그인 창은 작은 팝업으로 열립니다. 로그인을 마치고 그 창을 닫으면 자동으로 다시 불러옵니다.</p>
+    <div class="login-actions">
+      <button type="button" class="btn" id="loginRetry">로그인했어요, 다시 불러오기</button>
+      <button type="button" class="btn" id="loginClose">나중에</button>
+    </div>
+  </dialog>
 </body>
 </html>

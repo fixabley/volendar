@@ -148,10 +148,13 @@ function enrich(items, needsDetail) {
 
 // ---------- 신청내역 ----------
 
-async function loadApplied() {
+// interactive: 사용자가 직접 다시 불러온 경우. 이때는 '나중에'를 눌렀어도 로그인 안내를 다시 띄운다
+async function loadApplied({ interactive = false } = {}) {
   if (DEMO) {
     for (const [key, items] of Object.entries(demoApplied(today))) state.applied[key] = { status: 'ok', items };
     render();
+    // 스크린샷용: app.html?demo&login 이면 로그인 안내를 띄운다
+    if (new URLSearchParams(location.search).has('login')) showLoginDialog(['1365', 'vms']);
     return;
   }
   for (const key of Object.keys(SOURCES)) state.applied[key] = { status: 'loading', items: [] };
@@ -169,7 +172,41 @@ async function loadApplied() {
       render();
     }),
   );
+  const need = Object.keys(SOURCES).filter((key) => state.applied[key].status === 'needLogin');
+  if (need.length && (interactive || !state.loginDismissed)) showLoginDialog(need);
 }
+
+// ---------- 로그인 안내 (로그인 페이지를 팝업 창으로 열고, 닫히면 다시 불러온다) ----------
+
+const loginWindows = new Set();
+let afterLogin = () => loadApplied({ interactive: true });
+
+function showLoginDialog(sites, { reason, after } = {}) {
+  afterLogin = after ?? (() => loadApplied({ interactive: true }));
+  $('#loginDesc').textContent = reason
+    ?? `${sites.map((k) => LABEL[k]).join('·')} 신청내역을 불러오려면 로그인해야 합니다. 아래 버튼을 눌러 로그인해 주세요.`;
+  $('#loginButtons').replaceChildren(
+    ...sites.map((key) => h('button', { type: 'button', class: 'btn primary', onclick: () => openLogin(key) }, `${LABEL[key]} 로그인`)),
+  );
+  const dialog = $('#loginDialog');
+  if (!dialog.open) dialog.showModal();
+}
+
+async function openLogin(key) {
+  const url = SOURCES[key].LOGIN_URL;
+  if (globalThis.chrome?.windows) {
+    const win = await chrome.windows.create({ url, type: 'popup', width: 520, height: 780, focused: true });
+    loginWindows.add(win.id);
+  } else {
+    window.open(url, `login-${key}`, 'popup,width=520,height=780');
+  }
+}
+
+globalThis.chrome?.windows?.onRemoved.addListener((id) => {
+  if (!loginWindows.delete(id) || loginWindows.size) return;
+  $('#loginDialog').close();
+  afterLogin();
+});
 
 const allApplied = () => Object.values(state.applied).flatMap((a) => a.items);
 
@@ -642,7 +679,7 @@ function renderSessions() {
       if (a.status === 'loading') return h('span', { class: 'session' }, h('span', { class: 'dot' }), `${label} 불러오는 중…`);
       if (a.status === 'needLogin')
         return h('span', { class: 'session warn' }, h('span', { class: 'dot' }), `${label} 로그인 필요 · `,
-          h('a', { href: SOURCES[key].LOGIN_URL, target: '_blank', rel: 'noopener' }, '로그인'));
+          h('button', { type: 'button', class: 'linklike', onclick: () => openLogin(key) }, '로그인'));
       if (a.status === 'error') return h('span', { class: 'session warn', title: a.error }, h('span', { class: 'dot' }), `${label} 조회 실패`);
       return h('span', { class: 'session' }, h('span', { class: 'dot' }), label);
     }),
@@ -871,6 +908,10 @@ async function loadApplyDates(item) {
       : await s1365.fetchApplyDates(http, item.id);
     if (res.needLogin) {
       item.applyDates = { status: 'needLogin' };
+      showLoginDialog(['1365'], {
+        reason: '신청 가능 날짜를 확인하려면 1365에 로그인해야 합니다. 아래 버튼을 눌러 로그인해 주세요.',
+        after: () => loadApplyDates(item),
+      });
     } else {
       item.applyDates = { status: 'ok', days: res.days };
       // 확인한 달은 신청 가능한 날짜만 남기고, 확인하지 못한 달(maxMonths 넘김)은 활동요일 기준으로 그대로 둔다
@@ -1080,7 +1121,15 @@ function bind() {
     if (e.key === 'Escape' && state.selected) { state.selected = null; render(); }
   });
 
-  $('#reloadApplied').addEventListener('click', loadApplied);
+  $('#reloadApplied').addEventListener('click', () => loadApplied({ interactive: true }));
+  $('#loginRetry').addEventListener('click', () => {
+    $('#loginDialog').close();
+    afterLogin();
+  });
+  $('#loginClose').addEventListener('click', () => {
+    state.loginDismissed = true;
+    $('#loginDialog').close();
+  });
   const onAppliedFilter = () => {
     const s = state.settings;
     s.appliedSources = $$('input[name=appliedSource]:checked').map((i) => i.value);

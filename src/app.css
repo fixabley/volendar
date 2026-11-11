@@ -244,3 +244,15 @@ details[open] { display: flex; flex-direction: column; gap: 8px; }
 .cal-list .warn { color: var(--danger); }
 .cal-help p { margin: 0 0 6px; }
 .chip.busy.free { opacity: 0.6; border-left-style: dashed; }
+
+.login-dialog {
+  border: 1px solid var(--line); border-radius: 14px; padding: 22px; width: min(420px, calc(100vw - 32px));
+  background: var(--surface); color: var(--text); box-shadow: 0 20px 60px rgb(0 0 0 / 0.35);
+}
+.login-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
+.login-dialog h2 { font-size: 17px; margin-bottom: 8px; }
+.login-dialog p { margin: 0 0 12px; }
+.login-buttons { display: flex; gap: 8px; margin-bottom: 12px; }
+.login-buttons .btn { flex: 1; padding: 10px; }
+.login-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.linklike { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; }
