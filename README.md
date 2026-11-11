@@ -21,6 +21,13 @@ Volendar는 Volunteer와 Calendar를 합친 이름입니다.
    ```
 
 3. 오른쪽 위 **개발자 모드**를 켜고, 왼쪽 위 **압축해제된 확장 프로그램 로드**를 눌러 1번에서 압축을 푼 폴더(`manifest.json`이 있는 폴더)를 고릅니다.
+
+   <img src="docs/images/install-1.png" width="560" alt="chrome://extensions의 압축해제된 확장 프로그램 로드 버튼">
+
+   로드되면 확장 목록에 Volendar 카드가 생깁니다.
+
+   <img src="docs/images/install-2.png" width="460" alt="확장 목록에 추가된 Volendar 카드">
+
 4. 툴바의 퍼즐 아이콘을 눌러 **Volendar**를 고정(핀)해 두면 편합니다.
 
 새 버전을 받은 뒤에는 `chrome://extensions`에서 Volendar의 새로고침(↻)을 누르고 달력 탭을 다시 엽니다.
