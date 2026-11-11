@@ -7,6 +7,7 @@ import { classifyOpening, defaultAvailability, expand, isLongRange } from './lib
 import { formatMinutes, itemMinutes, summarizeHours } from './lib/hours.js';
 import { PROVINCES, mergeSubAreas } from './lib/regions.js';
 import { busyBlocks, parseIcs } from './lib/icsParse.js';
+import { demoApplied, demoCalendarIcs, demoOpenings, demoSubAreas } from './demo.js';
 
 const SOURCES = { 1365: s1365, vms };
 const LABEL = { 1365: '1365', vms: 'VMS', ext: '내 캘린더' };
@@ -36,6 +37,8 @@ function fill(el, ...children) {
 }
 
 const today = todayKST();
+// app.html?demo 로 열면 사이트에 요청하지 않고 예시 데이터만 쓴다 (스크린샷·시연용)
+const DEMO = new URLSearchParams(location.search).has('demo');
 
 const DEFAULT_SETTINGS = {
   appliedSources: ['1365', 'vms'],
@@ -67,6 +70,7 @@ const state = {
 const storage = globalThis.chrome?.storage?.local;
 
 async function loadSettings() {
+  if (DEMO) return; // 예시 화면은 저장된 설정과 섞지 않는다
   try {
     const { settings, calendarFile } = (await storage?.get(['settings', 'calendarFile'])) ?? {};
     state.external.file = calendarFile ?? null;
@@ -82,13 +86,14 @@ async function loadSettings() {
   }
 }
 
-const saveSettings = () => storage?.set({ settings: state.settings }).catch(() => {});
+const saveSettings = () => (DEMO ? undefined : storage?.set({ settings: state.settings }).catch(() => {}));
 
 // ---------- 상세 페이지 (장소·활동요일·추정 시간) ----------
 
 const details = new Map();
 
 function getDetail(item) {
+  if (DEMO) return Promise.resolve(null);
   const key = `${item.source}:${item.id}`;
   if (!details.has(key)) details.set(key, SOURCES[item.source].fetchDetail(http, item.id).catch(() => null));
   return details.get(key);
@@ -137,6 +142,11 @@ function enrich(items, needsDetail) {
 // ---------- 신청내역 ----------
 
 async function loadApplied() {
+  if (DEMO) {
+    for (const [key, items] of Object.entries(demoApplied(today))) state.applied[key] = { status: 'ok', items };
+    render();
+    return;
+  }
   for (const key of Object.keys(SOURCES)) state.applied[key] = { status: 'loading', items: [] };
   render();
   await Promise.all(
@@ -210,6 +220,18 @@ async function runSearch() {
   $('#searchBtn').disabled = true;
   render();
 
+  if (DEMO) {
+    state.openings.items = demoOpenings(today, f);
+    for (const key of f.sources) {
+      const n = state.openings.items.filter((it) => it.source === key).length;
+      summary[key] = { loaded: n, total: n };
+    }
+    state.openings.status = 'ok';
+    $('#searchBtn').disabled = false;
+    render();
+    return;
+  }
+
   await Promise.all(
     f.sources.map(async (key) => {
       if (sub && (key === '1365' ? !sub.c1365 : sub.cVms.length === 0)) {
@@ -249,6 +271,12 @@ async function loadSubAreas() {
   select.disabled = true;
   state.subAreas = [];
   if (!province) return;
+  if (DEMO) {
+    state.subAreas = demoSubAreas();
+    select.append(...state.subAreas.map((s) => h('option', { value: s.name }, s.name)));
+    select.disabled = false;
+    return;
+  }
   const [a, b] = await Promise.all([
     s1365.fetchSubAreas(http, province.c1365).catch(() => []),
     vms.fetchSubAreas(http, province.cVms).catch(() => []),
@@ -328,6 +356,13 @@ async function fetchCalendar(url) {
 }
 
 function loadCalendars() {
+  if (DEMO) {
+    state.external.file = { name: '내 캘린더(예시).ics', importedAt: today, events: parseIcs(demoCalendarIcs(today)) };
+    recomputeExternal();
+    renderCalendars();
+    render();
+    return;
+  }
   for (const { url } of state.settings.calendars) fetchCalendar(url);
 }
 
@@ -517,6 +552,7 @@ function setHoursRange(kind) {
 
 function renderSessions() {
   $('#sessions').replaceChildren(
+    DEMO ? h('span', { class: 'session' }, '예시 데이터') : '',
     ...Object.entries(state.applied).map(([key, a]) => {
       const label = LABEL[key];
       if (a.status === 'ok') return h('span', { class: 'session ok' }, h('span', { class: 'dot' }), `${label} 신청 ${a.items.length}건`);
