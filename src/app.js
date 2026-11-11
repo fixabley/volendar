@@ -46,6 +46,7 @@ const DEFAULT_SETTINGS = {
   appliedSources: ['1365', 'vms'],
   appliedStatuses: ['pending', 'confirmed', 'unknown'],
   includeLong: true,
+  showExternalInApplied: true,
   search: {
     sources: ['1365', 'vms'], province: '', keyword: '', openOnly: true,
     field1365: '', week: '0', online1365: '', adult: false, youth: false,
@@ -202,6 +203,10 @@ function clampInt(v, min, max, fallback) {
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 }
 
+// 같은 조건의 검색 결과는 잠시 다시 쓴다. 조건을 바꿀 때마다 바로 검색하므로 사이트에 같은 요청을 반복하지 않으려는 것
+const SEARCH_CACHE_MS = 10 * 60 * 1000;
+const searchCache = new Map();
+
 async function runSearch() {
   const f = readSearchForm();
   if (!f.from || !f.to || f.from > f.to) {
@@ -220,19 +225,22 @@ async function runSearch() {
     areaVms: province?.cVms, subAreaVms: sub?.cVms,
   };
   const summary = {};
-  // 지난 날짜는 신청할 수 없으니 오늘부터만 보여준다
-  state.openings = { status: 'loading', items: [], summary, range: { from: f.from < today ? today : f.from, to: f.to } };
+  // 지난 날짜는 신청할 수 없으니 오늘부터만 보여준다.
+  // 검색이 겹치면 앞선 검색의 늦은 응답이 화면을 덮지 않도록, 이번 검색의 객체에만 결과를 넣는다
+  const openings = { status: 'loading', items: [], summary, range: { from: f.from < today ? today : f.from, to: f.to } };
+  state.openings = openings;
+  const isCurrent = () => state.openings === openings;
   if (state.month < f.from.slice(0, 7) || state.month > f.to.slice(0, 7)) state.month = f.from.slice(0, 7);
   $('#searchBtn').disabled = true;
   render();
 
   if (DEMO) {
-    state.openings.items = demoOpenings(today, f);
+    openings.items = demoOpenings(today, f);
     for (const key of f.sources) {
-      const n = state.openings.items.filter((it) => it.source === key).length;
+      const n = openings.items.filter((it) => it.source === key).length;
       summary[key] = { loaded: n, total: n };
     }
-    state.openings.status = 'ok';
+    openings.status = 'ok';
     $('#searchBtn').disabled = false;
     render();
     return;
@@ -245,27 +253,33 @@ async function runSearch() {
         return;
       }
       const maxPages = key === '1365' ? f.maxPages1365 : f.maxPagesVms;
+      const cacheKey = `${key}|${maxPages}|${JSON.stringify(key === '1365' ? s1365.searchForm(filters, 1) : vms.searchParams(filters))}`;
+      const cached = searchCache.get(cacheKey);
       summary[key] = { loading: true, loaded: 0, total: 0 };
       try {
-        const res = await SOURCES[key].searchOpenings(http, filters, {
-          maxPages,
-          onProgress: (p) => {
-            Object.assign(summary[key], p);
-            scheduleRender();
-          },
-        });
+        const res = cached && Date.now() - cached.at < SEARCH_CACHE_MS
+          ? cached.res
+          : await SOURCES[key].searchOpenings(http, filters, {
+            maxPages,
+            onProgress: (p) => {
+              Object.assign(summary[key], p);
+              if (isCurrent()) scheduleRender();
+            },
+          });
+        if (res !== cached?.res) {
+          searchCache.set(cacheKey, { at: Date.now(), res });
+          enrich(res.items, (it) => (key === '1365' ? it.endDate > it.date : it.date === it.endDate));
+        }
         summary[key] = { loaded: res.items.length, total: res.total, truncated: res.truncated };
-        state.openings.items.push(...res.items);
-        enrich(res.items, (it) =>
-          key === '1365' ? it.endDate > it.date : it.date === it.endDate,
-        );
+        openings.items.push(...res.items);
       } catch (e) {
         summary[key] = { error: e.message };
       }
-      scheduleRender();
+      if (isCurrent()) scheduleRender();
     }),
   );
-  state.openings.status = 'ok';
+  openings.status = 'ok';
+  if (!isCurrent()) return;
   $('#searchBtn').disabled = false;
   render();
 }
@@ -311,13 +325,21 @@ function openingOccurrences() {
 
 const EXTERNAL_ITEM = { source: 'ext', id: 'ext', kind: 'external', statusKind: 'confirmed' };
 
+const externalOcc = (b) => ({
+  item: { ...EXTERNAL_ITEM, title: b.title || '바쁨', busy: b.busy !== false, allDay: b.allDay },
+  date: b.date,
+  startTime: b.allDay ? null : b.startTime,
+  endTime: b.allDay ? null : b.endTime,
+});
+
+// 빈 시간 필터에 쓰는 바쁜 시간
 function externalBusy() {
-  return state.external.blocks.map((b) => ({
-    item: { ...EXTERNAL_ITEM, title: b.title || '바쁨' },
-    date: b.date,
-    startTime: b.startTime,
-    endTime: b.endTime,
-  }));
+  return state.external.blocks.map((b) => ({ ...externalOcc(b), startTime: b.startTime, endTime: b.endTime }));
+}
+
+// 달력에 보여줄 불러온 일정 전부 (종일·한가함 포함)
+function externalShown() {
+  return (state.external.all ?? []).map(externalOcc);
 }
 
 // 내 신청은 고른 상태(예: 승인만)만 바쁜 시간으로 보고, '신청함' 표시는 상태와 관계없이 붙인다
@@ -332,21 +354,49 @@ function freeTimeOptions() {
 
 const toHttps = (url) => url.trim().replace(/^webcal:\/\//i, 'https://');
 
+// Google의 '공개 주소'는 캘린더를 공개한 경우에만 열린다. 대부분 비공개라 '비공개 주소'를 넣어야 한다.
+const isGooglePublicUrl = (url) => /calendar\.google\.com$/.test(new URL(url).hostname) && /\/public\/basic\.ics$/.test(new URL(url).pathname);
+
+function calendarHttpError(url, status) {
+  if (isGooglePublicUrl(url) && (status === 404 || status === 403)) {
+    return "공개 주소라서 열리지 않습니다. 캘린더가 비공개이면 'iCal 형식의 비공개 주소'를 넣어야 합니다";
+  }
+  if (status === 404) return '주소를 찾을 수 없습니다(404). 주소를 다시 복사해 주세요';
+  if (status === 401 || status === 403) return '접근이 거부되었습니다. 비공개 주소가 바뀌었거나 관리자가 막았을 수 있습니다';
+  return `캘린더 서버 응답 오류(${status})`;
+}
+
 // manifest의 optional_host_permissions와 같은 목록. 그 밖의 캘린더는 .ics 파일로 불러온다
 const CALENDAR_HOSTS = [/^calendar\.google\.com$/, /(^|\.)icloud\.com$/, /^outlook\.(live|office365|office)\.com$/];
 
+// 캘린더마다 따로 계산해서, 불러왔는데 바쁜 시간이 0개면 왜 그런지 보여줄 수 있게 한다
 function recomputeExternal() {
-  const events = [
-    ...Object.values(state.external.byUrl).flatMap((c) => c.events ?? []),
-    ...(state.external.file?.events ?? []),
-  ];
-  const { blocks, unsupported } = busyBlocks(events, {
-    from: today,
-    to: addDays(today, 400),
-    includeAllDay: state.settings.freeTime.allDayBusy,
-  });
-  state.external.blocks = blocks;
-  state.external.unsupported = unsupported;
+  const opts = { from: today, to: addDays(today, 400), includeAllDay: state.settings.freeTime.allDayBusy, showAll: true };
+  const sources = [...Object.values(state.external.byUrl), state.external.file].filter((c) => c?.events);
+  state.external.all = []; // 달력에 보여줄 불러온 일정 전부
+  state.external.blocks = []; // 그중 빈 시간 필터에 쓰는 바쁜 시간
+  state.external.unsupported = 0;
+  for (const c of sources) {
+    const r = busyBlocks(c.events, opts);
+    const busy = r.blocks.filter((b) => b.busy);
+    c.busy = busy.length;
+    c.skipped = r.skipped;
+    state.external.all.push(...r.blocks);
+    state.external.blocks.push(...busy);
+    state.external.unsupported += r.unsupported;
+  }
+}
+
+// '일정 120개 · 앞으로 바쁜 시간 0개 (종일 30, 한가함 2, 지난 일정 88)'
+function calendarSummary(c) {
+  const s = c.skipped ?? {};
+  const why = [
+    s.allDay && `종일 ${s.allDay}개`,
+    s.free && `'한가함' ${s.free}개`,
+    s.outside && `지난·먼 일정 ${s.outside}개`,
+    s.cancelled && `취소 ${s.cancelled}개`,
+  ].filter(Boolean);
+  return `일정 ${c.events.length}개 · 앞으로 바쁜 시간 ${c.busy ?? 0}개${c.busy ? '' : why.length ? ` (빠진 일정: ${why.join(', ')})` : ''}`;
 }
 
 async function fetchCalendar(url) {
@@ -355,7 +405,7 @@ async function fetchCalendar(url) {
   renderCalendars();
   try {
     const res = await fetch(url, { credentials: 'omit', cache: 'no-store' });
-    if (!res.ok) throw new Error(`응답 오류 ${res.status}`);
+    if (!res.ok) throw new Error(calendarHttpError(url, res.status));
     const text = await res.text();
     if (!text.includes('BEGIN:VCALENDAR')) throw new Error('ICS 형식이 아닙니다');
     Object.assign(entry, { status: 'ok', events: parseIcs(text) });
@@ -388,6 +438,10 @@ function addCalendar(raw) {
     $('#calStatus').textContent = 'https:// 또는 webcal:// 로 시작하는 주소를 넣어 주세요.';
     return;
   }
+  if (isGooglePublicUrl(url.href)) {
+    $('#calStatus').textContent = "Google '공개 주소'입니다. 캘린더가 비공개이면 열리지 않으니, Google 캘린더 설정 화면 아래쪽의 'iCal 형식의 비공개 주소'(…/private-…/basic.ics)를 넣어 주세요.";
+    return;
+  }
   if (!CALENDAR_HOSTS.some((re) => re.test(url.hostname))) {
     $('#calStatus').textContent = `${url.hostname} 주소는 지원하지 않습니다. Google·iCloud·Outlook 주소만 등록할 수 있고, 다른 캘린더는 .ics 파일로 내보내서 불러와 주세요.`;
     return;
@@ -395,7 +449,11 @@ function addCalendar(raw) {
   const request = globalThis.chrome?.permissions
     ? chrome.permissions.request({ origins: [`${url.origin}/*`] })
     : Promise.resolve(true);
-  request.then((granted) => {
+  request.catch((e) => {
+    $('#calStatus').textContent = `권한을 요청하지 못했습니다: ${e.message}. 확장을 새로고침한 뒤 다시 시도해 주세요.`;
+    return null;
+  }).then((granted) => {
+    if (granted === null) return;
     if (!granted) {
       $('#calStatus').textContent = `${url.host}에 접근하는 권한을 허용해야 불러올 수 있습니다.`;
       return;
@@ -446,20 +504,24 @@ function renderCalendars() {
   $('#calList').replaceChildren(
     ...state.settings.calendars.map(({ url }) => {
       const c = state.external.byUrl[url];
-      const status = !c ? '' : c.status === 'loading' ? '불러오는 중…' : c.status === 'error' ? `오류: ${c.error}` : `일정 ${c.events.length}개`;
+      const status = !c ? '' : c.status === 'loading' ? '불러오는 중…' : c.status === 'error' ? `오류: ${c.error}` : calendarSummary(c);
       return h('li', {},
-        h('span', { class: 'name', title: status }, `${maskUrl(url)} · ${status}`),
+        h('span', { class: `name${c?.status === 'error' ? ' warn' : ''}`, title: status }, h('b', {}, maskUrl(url)), h('br'), status),
         h('button', { type: 'button', class: 'btn small', onclick: () => removeCalendar(url) }, '삭제'));
     }),
   );
   const f = state.external.file;
   $('#calFileInfo').replaceChildren(
-    f ? `${f.name} (일정 ${f.events.length}개, ${f.importedAt})` : '',
+    f ? `${f.name} (${f.importedAt}) · ${calendarSummary(f)}` : '',
     f ? h('button', { type: 'button', class: 'btn small', onclick: clearCalendarFile }, '지우기') : '',
   );
   const n = state.external.blocks.length;
   const notes = [];
-  if (n) notes.push(`앞으로 바쁜 시간 ${n}개를 빈 시간 필터에 반영합니다.`);
+  if (state.external.all?.length) notes.push(`불러온 일정은 달력에 회색으로 보입니다. 그중 바쁜 시간 ${n}개를 빈 시간 필터에 쓰고, 점선 칸(종일·한가함)은 쓰지 않습니다.`);
+  const all = [...Object.values(state.external.byUrl), f].filter((c) => c?.events);
+  if (!n && all.some((c) => c.skipped?.allDay) && !state.settings.freeTime.allDayBusy) {
+    notes.push("종일 일정을 반영하려면 '종일 일정도 바쁜 시간으로 보기'를 켜세요.");
+  }
   if (state.external.unsupported) notes.push(`반복 규칙이 복잡한 일정 ${state.external.unsupported}개는 첫 회만 반영했습니다.`);
   $('#calStatus').textContent = notes.join(' ');
   if (n || state.settings.calendars.length || f) $('#extBox').open = true;
@@ -469,9 +531,13 @@ function computeView() {
   const { days, first, last } = gridRange();
   if (state.mode === 'applied') {
     const items = filteredApplied();
+    const mine = state.settings.showExternalInApplied ? externalShown().filter((o) => inRange(o, first, last)) : [];
     return {
       days,
-      chips: items.flatMap(expand).filter((o) => inRange(o, first, last)).map((occ) => ({ occ, variant: 'applied' })),
+      chips: [
+        ...items.flatMap(expand).filter((o) => inRange(o, first, last)).map((occ) => ({ occ, variant: 'applied' })),
+        ...mine.map((occ) => ({ occ, variant: 'busy' })),
+      ],
       long: items.filter((it) => isLongRange(it) && overlapsRange(it, first, last)).map((item) => ({ item, variant: 'applied' })),
     };
   }
@@ -490,7 +556,8 @@ function computeView() {
     }
     chips.push({ occ: { ...occ, tags }, variant: 'opening' });
   }
-  for (const occ of busy) {
+  // 내 신청(바쁜 시간으로 고른 상태)과 불러온 내 캘린더 일정 전부를 회색으로 깐다
+  for (const occ of [...busy.filter((o) => o.item.source !== 'ext'), ...externalShown()]) {
     if (occ.item.statusKind !== 'cancelled' && inRange(occ, first, last)) chips.push({ occ, variant: 'busy' });
   }
   const long = ft.showUntimed
@@ -585,12 +652,13 @@ function renderSessions() {
 function renderLegend() {
   const item = (color, text, style = '') => h('span', {}, h('i', { style: `background:${color};${style}` }), text);
   const base = [item('var(--c1365)', '1365'), item('var(--cvms)', 'VMS')];
-  $('#legend').replaceChildren(
+  fill($('#legend'),
     ...(state.mode === 'applied'
       ? [
         item('var(--ok-soft)', '승인·참석가능', 'border:1px solid var(--ok)'),
         item('var(--pending-soft)', '접수·대기', 'border:1px solid var(--line)'),
         h('span', {}, '왼쪽 띠:'), ...base,
+        state.settings.showExternalInApplied && state.external.blocks.length > 0 && item('var(--busy)', '내 캘린더'),
         h('span', {}, '점선: 시간 미정'), h('span', {}, '?: 추정 시간'),
       ]
       : [...base, item('var(--busy)', '내 일정(신청·캘린더)'), h('span', {}, '✓ 신청함'), item('transparent', '겹침', 'border:2px solid var(--danger)'), h('span', {}, '점선: 시간 미정')]),
@@ -641,6 +709,7 @@ function chip({ occ, variant }) {
   if (it.statusKind === 'cancelled') cls.push('cancelled');
   if (!occ.startTime) cls.push('untimed');
   if (it.timeGuessed) cls.push('guessed');
+  if (it.source === 'ext' && !it.busy) cls.push('free');
   if (occ.tags?.includes('conflict')) cls.push('conflict');
   if (occ.tags?.includes('applied')) cls.push('mine');
   const time = occ.startTime ? `${occ.startTime}${it.timeGuessed ? '?' : ''}` : '';
@@ -747,6 +816,10 @@ function renderDetail(view) {
     c.phone && c.email && ' · ',
     c.email && h('a', { href: `mailto:${c.email}` }, c.email)));
   add('기관 주소', c.address);
+  if (it.source === 'ext') {
+    add('빈 시간 필터', it.busy ? '바쁜 시간으로 반영'
+      : it.allDay ? "반영 안 함 (종일 일정 · '종일 일정도 바쁜 시간으로 보기'로 켤 수 있음)" : "반영 안 함 ('한가함'으로 표시된 일정)");
+  }
   add('지역', it.area);
   add('모집기간', it.recruitPeriod);
   add('인정시간', it.creditHours);
@@ -967,6 +1040,7 @@ function fillForm() {
   for (const el of $$('input[name=appliedSource]')) el.checked = s.appliedSources.includes(el.value);
   for (const el of $$('input[name=appliedStatus]')) el.checked = s.appliedStatuses.includes(el.value);
   $('#includeLong').checked = s.includeLong;
+  $('#showExternalInApplied').checked = s.showExternalInApplied;
   const month = monthBounds(state.month);
   $('#hoursFrom').value = month.from;
   $('#hoursTo').value = month.to;
@@ -1012,17 +1086,32 @@ function bind() {
     s.appliedSources = $$('input[name=appliedSource]:checked').map((i) => i.value);
     s.appliedStatuses = $$('input[name=appliedStatus]:checked').map((i) => i.value);
     s.includeLong = $('#includeLong').checked;
+    s.showExternalInApplied = $('#showExternalInApplied').checked;
     saveSettings();
     render();
   };
-  for (const el of $$('input[name=appliedSource], input[name=appliedStatus], #includeLong')) el.addEventListener('change', onAppliedFilter);
+  for (const el of $$('input[name=appliedSource], input[name=appliedStatus], #includeLong, #showExternalInApplied')) el.addEventListener('change', onAppliedFilter);
   $('#appliedKeyword').addEventListener('input', () => render());
   $('#exportApplied').addEventListener('click', exportApplied);
   $('#exportContacts').addEventListener('click', () => exportContacts(filteredApplied(), `봉사-연락처-${today}.vcf`));
   for (const id of ['hoursFrom', 'hoursTo']) $(`#${id}`).addEventListener('change', renderHours);
   for (const btn of $$('.quick [data-range]')) btn.addEventListener('click', () => setHoursRange(btn.dataset.range));
 
-  $('#searchForm').addEventListener('submit', (e) => { e.preventDefault(); runSearch(); });
+  // 검색 조건을 바꾸면 잠시 뒤 자동으로 다시 검색한다 (글자 입력은 조금 더 기다린다)
+  let searchTimer;
+  const scheduleSearch = (delay) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(runSearch, delay);
+  };
+  $('#searchForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    clearTimeout(searchTimer);
+    runSearch();
+  });
+  $('#searchForm').addEventListener('change', (e) => {
+    if (e.target.id !== 'keyword') scheduleSearch(600);
+  });
+  $('#keyword').addEventListener('input', () => scheduleSearch(800));
   $('#province').addEventListener('change', loadSubAreas);
   $('#exportOpenings').addEventListener('click', exportOpenings);
 

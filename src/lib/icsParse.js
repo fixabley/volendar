@@ -203,15 +203,34 @@ function splitByKstDay(startMs, endMs, title) {
   return blocks;
 }
 
-// 바쁜 시간 구간 목록. options: { from, to, includeAllDay }
-export function busyBlocks(events, { from, to, includeAllDay = false }) {
+// 바쁜 시간 구간 목록. options: { from, to, includeAllDay, showAll }
+// 각 구간에는 busy(빈 시간 필터에 쓸지)와 allDay가 붙는다. showAll이면 바쁜 시간이 아닌 일정(종일·한가함)도 busy:false로 넣는다.
+// skipped: 바쁜 시간에서 뺀 일정 수(이유별). 불러왔는데 아무것도 안 보일 때 이유를 보여주려고 센다.
+export function busyBlocks(events, { from, to, includeAllDay = false, showAll = false }) {
   const blocks = [];
   let unsupported = 0;
+  const skipped = { allDay: 0, free: 0, cancelled: 0, own: 0 };
   const overridden = new Set(events.filter((e) => e.recurrenceId).map((e) => `${e.uid}|${instantKey(e.recurrenceId)}`));
   for (const ev of events) {
-    if (ev.status === 'CANCELLED' || ev.transp === 'TRANSPARENT') continue;
-    if (ev.uid?.endsWith('@volendar')) continue; // 이 확장이 내보낸 봉사 일정은 신청내역으로 이미 비교한다
-    if (ev.start.allDay && !includeAllDay) continue;
+    if (ev.status === 'CANCELLED') {
+      skipped.cancelled++;
+      continue;
+    }
+    if (ev.uid?.endsWith('@volendar')) {
+      skipped.own++; // 이 확장이 내보낸 봉사 일정은 신청내역으로 이미 비교한다
+      continue;
+    }
+    let busy = true;
+    if (ev.start.allDay && !includeAllDay) {
+      skipped.allDay++;
+      busy = false;
+    } else if (ev.transp === 'TRANSPARENT' && !ev.start.allDay) {
+      // Google은 종일 일정을 기본으로 '한가함'으로 내보내므로, 종일 일정을 넣기로 했으면 한가함이어도 넣는다
+      skipped.free++;
+      busy = false;
+    }
+    if (!busy && !showAll) continue;
+    const tag = { busy, allDay: ev.start.allDay };
     const excluded = new Set(ev.exdates.map(instantKey));
     let starts = [ev.start.date];
     if (ev.rrule && !ev.recurrenceId) {
@@ -230,15 +249,17 @@ export function busyBlocks(events, { from, to, includeAllDay = false }) {
       if (excluded.has(key) || (!ev.recurrenceId && overridden.has(`${ev.uid}|${key}`))) continue;
       if (ev.start.allDay) {
         const span = ev.end?.allDay ? Math.max(1, daysBetween(ev.start.date, ev.end.date)) : 1;
-        for (let i = 0; i < span; i++) blocks.push({ date: addDays(date, i), startTime: '00:00', endTime: '24:00', title: ev.title ?? '' });
+        for (let i = 0; i < span; i++) blocks.push({ date: addDays(date, i), startTime: '00:00', endTime: '24:00', title: ev.title ?? '', ...tag });
         continue;
       }
       const startMs = zonedToUtc(date, ev.start.time, ev.start.tz);
       let endMs;
       if (ev.end && !ev.end.allDay) endMs = startMs + (zonedToUtc(ev.end.date, ev.end.time, ev.end.tz) - zonedToUtc(ev.start.date, ev.start.time, ev.start.tz));
       else endMs = startMs + (ev.duration ?? 0);
-      blocks.push(...splitByKstDay(startMs, endMs, ev.title ?? ''));
+      blocks.push(...splitByKstDay(startMs, endMs, ev.title ?? '').map((b) => ({ ...b, ...tag })));
     }
   }
-  return { blocks: blocks.filter((b) => b.date >= from && b.date <= to), unsupported };
+  const inRange = blocks.filter((b) => b.date >= from && b.date <= to);
+  const outside = blocks.filter((b) => b.busy).length - inRange.filter((b) => b.busy).length;
+  return { blocks: inRange, unsupported, skipped: { ...skipped, outside } };
 }

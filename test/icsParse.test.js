@@ -60,3 +60,29 @@ test('이 확장이 만든 ICS를 다시 읽되, 신청내역과 겹치지 않�
   const other = { ...ev, uid: 'x@elsewhere' };
   assert.deepEqual(busyBlocks([other], range).blocks.map((b) => `${b.date} ${b.startTime}-${b.endTime}`), ['2026-11-20 09:00-12:00']);
 });
+
+test('Google처럼 한가함으로 표시된 종일 일정도 옵션을 켜면 넣고, 뺀 이유를 센다', () => {
+  const ics = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0',
+    'BEGIN:VEVENT', 'UID:g1@google.com', 'DTSTART;VALUE=DATE:20261120', 'DTEND;VALUE=DATE:20261121', 'TRANSP:TRANSPARENT', 'SUMMARY:종일 약속', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:g2@google.com', 'DTSTART:20261119T010000Z', 'DTEND:20261119T020000Z', 'TRANSP:TRANSPARENT', 'SUMMARY:한가함 표시', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:g3@google.com', 'DTSTART:20250101T010000Z', 'DTEND:20250101T020000Z', 'SUMMARY:지난 일정', 'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+  const events = parseIcs(ics);
+  const off = busyBlocks(events, range);
+  assert.deepEqual(off.blocks, []);
+  assert.deepEqual(off.skipped, { allDay: 1, free: 1, cancelled: 0, own: 0, outside: 1 });
+  const on = busyBlocks(events, { ...range, includeAllDay: true });
+  assert.deepEqual(on.blocks.map(fmt), ['2026-11-20 00:00-24:00 종일 약속']);
+});
+
+test('showAll이면 바쁜 시간이 아닌 일정도 busy:false로 함께 돌려준다', () => {
+  const all = blocksOf({ showAll: true });
+  const travel = all.filter((b) => b.title === '여행');
+  assert.deepEqual(travel.map((b) => [b.date, b.busy, b.allDay]), [['2026-11-20', false, true], ['2026-11-21', false, true]]);
+  const free = all.find((b) => b.title === '한가함');
+  assert.deepEqual([free.busy, free.allDay], [false, false]);
+  assert.ok(all.filter((b) => b.busy).length === blocksOf().length);
+  assert.ok(!all.some((b) => b.title === '취소된 약속' || b.title === '[1365] 내보낸 봉사'));
+});

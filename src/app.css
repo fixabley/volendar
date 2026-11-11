@@ -240,3 +240,7 @@ details[open] { display: flex; flex-direction: column; gap: 8px; }
 .detail .content-text { white-space: pre-wrap; font-size: 13px; line-height: 1.6; color: var(--text); max-height: 320px; overflow: auto; }
 .detail dd a { color: var(--accent); }
 .detail .save-contact { display: block; margin-bottom: 10px; }
+.cal-list .name { white-space: normal; }
+.cal-list .warn { color: var(--danger); }
+.cal-help p { margin: 0 0 6px; }
+.chip.busy.free { opacity: 0.6; border-left-style: dashed; }
