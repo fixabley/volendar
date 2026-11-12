@@ -143,7 +143,10 @@ export function parseDetailPage(doc) {
   };
 }
 
+// 페이지 번호는 cPage로 받는다(사이트의 fnPage가 바꾸는 값). currentPageNo만 보내면 늘 1페이지가 와서,
+// 신청이 한 페이지(10건)를 넘으면 봉사일이 가장 이른 일정부터 빠졌다.
 const appliedForm = (page, from, to) => ({
+  cPage: String(page),
   currentPageNo: String(page),
   schActSe: '',
   schApply: '',

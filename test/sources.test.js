@@ -32,11 +32,23 @@ test('1365 신청내역 조회는 새 항목이 없으면 멈추고, 로그아�
   assert.equal(res.needLogin, false);
   assert.equal(res.items.length, 3);
   assert.equal(http.calls.length, 2); // 2페이지가 같은 목록이면 멈춤
-  assert.equal(http.calls[0].form.currentPageNo, '1');
+  assert.equal(http.calls[0].form.cPage, '1');
   assert.equal(http.calls[0].origin, s1365.ORIGIN);
 
   const out = await s1365.fetchApplied(fakeHttp(() => fixture('1365-logged-out.html')));
   assert.deepEqual(out, { needLogin: true, items: [] });
+});
+
+test('1365 신청내역은 cPage로 다음 페이지를 받아 가장 이른 일정까지 모은다', async () => {
+  // 봉사일이 늦은 순서라 가장 이른 일정은 2페이지에 있다. 사이트는 마지막 뒤 페이지에 마지막 페이지를 다시 준다.
+  const page2 = fixture('1365-applied.html')
+    .replace("detailView('1000001','2','20261203','10'", "detailView('1000009','2','20261114','10'")
+    .replace('<dd>2026.12.03</dd>', '<dd>2026.11.14</dd>');
+  const http = fakeHttp((url, opts) => (opts.form.cPage === '1' ? fixture('1365-applied.html') : page2));
+  const res = await s1365.fetchApplied(http);
+  assert.deepEqual(http.calls.map((c) => c.form.cPage), ['1', '2', '3']);
+  assert.equal(res.items.length, 4);
+  assert.ok(res.items.some((i) => i.uid === '1365-1000009-20261114-1000'));
 });
 
 test('1365 모집 검색 결과는 PC용 칸만 읽는다', () => {
